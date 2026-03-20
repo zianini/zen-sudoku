@@ -1,0 +1,35 @@
+{
+  "entities": {
+    "Ranking": {
+      "title": "Ranking",
+      "description": "User game scores for the leaderboard",
+      "type": "object",
+      "properties": {
+        "username": {
+          "type": "string",
+          "description": "The name of the player"
+        },
+        "time": {
+          "type": "number",
+          "description": "Completion time in seconds"
+        },
+        "difficulty": {
+          "type": "string",
+          "description": "The difficulty level of the game"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the score was recorded"
+        }
+      },
+      "required": ["username", "time", "difficulty", "createdAt"]
+    }
+  },
+  "firestore": {
+    "rankings": {
+      "schema": "Ranking",
+      "description": "Collection of game scores"
+    }
+  }
+}

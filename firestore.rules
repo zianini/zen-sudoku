@@ -1,0 +1,42 @@
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: rankings
+// Document ID: auto-generated
+// Fields:
+//   - username: string (required, 1-20 chars) - The name of the player
+//   - time: number (required, positive) - Completion time in seconds
+//   - difficulty: string (required, enum: ['초급', '중급', '고급']) - Difficulty level
+//   - createdAt: timestamp (required) - When the score was recorded
+//
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isValidRanking(data) {
+      return data.username is string && data.username.size() >= 1 && data.username.size() <= 20 &&
+             data.time is number && data.time > 0 &&
+             data.difficulty in ['초급', '중급', '고급'] &&
+             data.createdAt is timestamp;
+    }
+
+    match /rankings/{rankingId} {
+      // Allow anyone to read rankings (public leaderboard)
+      allow read: if true;
+      
+      // Allow creation of rankings if data is valid
+      allow create: if isValidRanking(request.resource.data);
+      
+      // Rankings are immutable once created
+      allow update, delete: if false;
+    }
+  }
+}
