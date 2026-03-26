@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Trophy, 
@@ -17,7 +17,9 @@ import {
   Pencil,
   User,
   Medal,
-  ChevronRight
+  ChevronRight,
+  Wand2,
+  Sparkles
 } from 'lucide-react';
 import { Difficulty, SudokuBoard, GameState } from './types';
 import { generateFullBoard, createPuzzle, checkWin } from './utils/sudoku';
@@ -50,6 +52,27 @@ export default function App() {
   const [rankings, setRankings] = useState<RankingEntry[]>([]);
   const [showRankings, setShowRankings] = useState(false);
 
+  const { numberStats, remainingCellsCount } = useMemo(() => {
+    const counts = new Array(10).fill(0);
+    let remaining = 0;
+    gameState.board.forEach(row => {
+      row.forEach(cell => {
+        if (cell.value !== null && cell.isCorrect) {
+          counts[cell.value]++;
+        } else {
+          remaining++;
+        }
+      });
+    });
+    const stats = counts.map((count, num) => ({
+      num,
+      count,
+      remaining: 9 - count,
+      isCompleted: count === 9
+    }));
+    return { numberStats: stats, remainingCellsCount: remaining };
+  }, [gameState.board]);
+
   const startNewGame = useCallback((diff: Difficulty = gameState.difficulty) => {
     const fullBoard = generateFullBoard();
     const puzzle = createPuzzle(fullBoard, diff);
@@ -61,6 +84,7 @@ export default function App() {
       time: 0,
       isPaused: false,
       isGameOver: false,
+      isAutoFilling: false,
       selectedCell: null,
     });
   }, [gameState.difficulty]);
@@ -102,12 +126,12 @@ export default function App() {
   };
 
   const handleCellClick = (row: number, col: number) => {
-    if (gameState.isPaused || gameState.isGameOver) return;
+    if (gameState.isPaused || gameState.isGameOver || gameState.isAutoFilling) return;
     setGameState(prev => ({ ...prev, selectedCell: [row, col] }));
   };
 
   const handleNumberInput = async (num: number) => {
-    if (!gameState.selectedCell || gameState.isPaused || gameState.isGameOver) return;
+    if (!gameState.selectedCell || gameState.isPaused || gameState.isGameOver || gameState.isAutoFilling) return;
     const [row, col] = gameState.selectedCell;
     const cell = gameState.board[row][col];
 
@@ -162,7 +186,7 @@ export default function App() {
   };
 
   const handleErase = () => {
-    if (!gameState.selectedCell || gameState.isPaused || gameState.isGameOver) return;
+    if (!gameState.selectedCell || gameState.isPaused || gameState.isGameOver || gameState.isAutoFilling) return;
     const [row, col] = gameState.selectedCell;
     const cell = gameState.board[row][col];
     if (cell.initialValue !== null) return;
@@ -173,7 +197,7 @@ export default function App() {
   };
 
   const handleHint = () => {
-    if (!gameState.selectedCell || gameState.isPaused || gameState.isGameOver) return;
+    if (!gameState.selectedCell || gameState.isPaused || gameState.isGameOver || gameState.isAutoFilling) return;
     const [row, col] = gameState.selectedCell;
     const cell = gameState.board[row][col];
     if (cell.value !== null) return;
@@ -192,6 +216,62 @@ export default function App() {
       ...prev,
       board: newBoard,
       isGameOver: checkWin(newBoard)
+    }));
+  };
+
+  const handleAutoComplete = async () => {
+    if (remainingCellsCount > 9 || gameState.isGameOver || gameState.isAutoFilling) return;
+
+    setGameState(prev => ({ ...prev, isAutoFilling: true, selectedCell: null }));
+
+    // Find all cells that need to be filled
+    const cellsToFill: { r: number, c: number }[] = [];
+    gameState.board.forEach((row, rIdx) => {
+      row.forEach((cell, cIdx) => {
+        if (cell.value === null || !cell.isCorrect) {
+          cellsToFill.push({ r: rIdx, c: cIdx });
+        }
+      });
+    });
+
+    // Fill cells one by one with a delay
+    let currentBoard = [...gameState.board.map(row => [...row])];
+    
+    for (const { r, c } of cellsToFill) {
+      currentBoard[r][c] = {
+        ...currentBoard[r][c],
+        value: solution[r][c],
+        isCorrect: true,
+        isNotes: []
+      };
+      
+      // Update state for each cell to show the process
+      setGameState(prev => ({
+        ...prev,
+        board: [...currentBoard.map(row => [...row])]
+      }));
+      
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+
+    if (username.trim()) {
+      try {
+        await addDoc(collection(db, 'rankings'), {
+          username: username.trim(),
+          time: gameState.time,
+          difficulty: gameState.difficulty,
+          createdAt: serverTimestamp()
+        });
+      } catch (e) {
+        console.error("Error adding ranking: ", e);
+      }
+    }
+
+    setGameState(prev => ({
+      ...prev,
+      isAutoFilling: false,
+      isGameOver: true,
+      selectedCell: null
     }));
   };
 
@@ -256,11 +336,11 @@ export default function App() {
                 const isSameRowOrCol = gameState.selectedCell?.[0] === rIdx || gameState.selectedCell?.[1] === cIdx;
                 const isSameValue = selectedValue !== null && cell.value === selectedValue;
                 
-                const borderRight = (cIdx + 1) % 3 === 0 && cIdx !== 8 ? 'border-r-2 border-purple-900' : 'border-r border-purple-100';
-                const borderBottom = (rIdx + 1) % 3 === 0 && rIdx !== 8 ? 'border-b-2 border-purple-900' : 'border-b border-purple-100';
+                const borderRight = (cIdx + 1) % 3 === 0 && cIdx !== 8 ? 'border-r-2 border-purple-300' : (cIdx !== 8 ? 'border-r border-purple-300' : '');
+                const borderBottom = (rIdx + 1) % 3 === 0 && rIdx !== 8 ? 'border-b-2 border-purple-300' : (rIdx !== 8 ? 'border-b border-purple-300' : '');
 
-                // Checkerboard pattern logic
-                const isChecker = (rIdx + cIdx) % 2 === 0;
+                // 3x3 Block Checkerboard pattern logic (cleaner than cell-by-cell)
+                const isBlockChecker = (Math.floor(rIdx / 3) + Math.floor(cIdx / 3)) % 2 === 0;
 
                 return (
                   <button
@@ -272,7 +352,7 @@ export default function App() {
                       ${isSelected ? 'bg-purple-700 text-white z-20 scale-105 shadow-xl ring-4 ring-purple-300' : 
                         isSameValue ? 'bg-purple-500 text-white scale-110 z-10 shadow-lg ring-2 ring-purple-400' :
                         isSameRowOrCol ? 'bg-purple-200/60 text-purple-900' : 
-                        isChecker ? 'bg-white' : 'bg-purple-100'}
+                        isBlockChecker ? 'bg-white' : 'bg-purple-50'}
                       ${!cell.isCorrect && cell.value !== null ? 'text-red-500' : ''}
                       ${cell.initialValue !== null ? 'font-bold text-purple-900' : 'font-normal text-purple-800'}
                     `}
@@ -281,8 +361,18 @@ export default function App() {
                       <>
                         {cell.value !== null ? (
                           <motion.span
-                            initial={false}
-                            animate={isSameValue ? { scale: 1.2 } : { scale: 1 }}
+                            key={`${rIdx}-${cIdx}-${cell.value}`}
+                            initial={{ scale: 0.5, opacity: 0 }}
+                            animate={{ 
+                              scale: isSameValue ? 1.2 : 1, 
+                              opacity: 1 
+                            }}
+                            transition={{ 
+                              type: 'spring', 
+                              stiffness: 300, 
+                              damping: 20,
+                              scale: { duration: 0.2 }
+                            }}
                           >
                             {cell.value}
                           </motion.span>
@@ -452,16 +542,58 @@ export default function App() {
         </div>
 
         {/* Number Pad */}
-        <div className="grid grid-cols-9 gap-2">
-          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
-            <button
-              key={num}
-              onClick={() => handleNumberInput(num)}
-              className="aspect-square flex items-center justify-center text-2xl font-bold bg-white border border-purple-200 rounded-xl hover:border-purple-600 hover:bg-purple-50 transition-all text-purple-900 shadow-sm"
-            >
-              {num}
-            </button>
-          ))}
+        <div className="relative">
+          <div className="grid grid-cols-9 gap-2">
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => {
+              const stats = numberStats[num];
+              const isCompleted = stats.isCompleted;
+              return (
+                <button
+                  key={num}
+                  onClick={() => !isCompleted && handleNumberInput(num)}
+                  className={`aspect-square flex flex-col items-center justify-center border rounded-xl transition-all shadow-sm relative ${
+                    isCompleted 
+                      ? 'bg-purple-50 border-purple-100 text-purple-200 cursor-default' 
+                      : 'bg-white border-purple-200 text-purple-900 hover:border-purple-600 hover:bg-purple-50'
+                  }`}
+                >
+                  <span className="text-2xl font-bold leading-none">{num}</span>
+                  <span className={`text-[10px] mt-0.5 font-medium ${isCompleted ? 'text-purple-200' : 'text-purple-400'}`}>
+                    {stats.remaining}
+                  </span>
+                  {isCompleted && (
+                    <div className="absolute top-0 right-0 p-0.5">
+                      <div className="w-1.5 h-1.5 bg-purple-400 rounded-full" />
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Auto-complete Magic Wand Button */}
+          <AnimatePresence>
+            {remainingCellsCount <= 9 && remainingCellsCount > 0 && !gameState.isGameOver && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.5, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.5, y: 20 }}
+                className="absolute -top-16 left-0 right-0 flex justify-center z-30"
+              >
+                <button
+                  onClick={handleAutoComplete}
+                  disabled={gameState.isAutoFilling}
+                  className={`flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-amber-400 to-orange-500 text-white rounded-full font-bold shadow-lg shadow-orange-200 transition-all ${
+                    gameState.isAutoFilling ? 'opacity-80 scale-95' : 'hover:scale-105 animate-pulse'
+                  }`}
+                >
+                  <Wand2 size={20} className={gameState.isAutoFilling ? 'animate-spin' : ''} />
+                  <span>{gameState.isAutoFilling ? '자동 채우는 중...' : '자동 완성하기'}</span>
+                  <Sparkles size={16} />
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Action Buttons */}
