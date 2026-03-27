@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import confetti from 'canvas-confetti';
 import { 
   Trophy, 
   RotateCcw, 
@@ -19,7 +20,8 @@ import {
   Medal,
   ChevronRight,
   Wand2,
-  Sparkles
+  Sparkles,
+  Gamepad2
 } from 'lucide-react';
 import { Difficulty, SudokuBoard, GameState } from './types';
 import { generateFullBoard, createPuzzle, checkWin } from './utils/sudoku';
@@ -44,6 +46,8 @@ export default function App() {
     time: 0,
     isPaused: false,
     isGameOver: false,
+    isStarted: false,
+    isAutoFilling: false,
     selectedCell: null,
   });
   const [solution, setSolution] = useState<number[][]>([]);
@@ -84,14 +88,45 @@ export default function App() {
       time: 0,
       isPaused: false,
       isGameOver: false,
+      isStarted: false,
       isAutoFilling: false,
       selectedCell: null,
     });
   }, [gameState.difficulty]);
 
+  const handleStartGame = () => {
+    if (!username.trim()) {
+      alert('이름을 입력해주세요!');
+      return;
+    }
+    setGameState(prev => ({ ...prev, isStarted: true }));
+  };
+
   useEffect(() => {
     startNewGame();
   }, []);
+
+  useEffect(() => {
+    if (gameState.isGameOver && gameState.mistakes < 3) {
+      const duration = 3 * 1000;
+      const animationEnd = Date.now() + duration;
+      const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
+
+      const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min;
+
+      const interval: any = setInterval(function() {
+        const timeLeft = animationEnd - Date.now();
+
+        if (timeLeft <= 0) {
+          return clearInterval(interval);
+        }
+
+        const particleCount = 50 * (timeLeft / duration);
+        confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } });
+        confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } });
+      }, 250);
+    }
+  }, [gameState.isGameOver, gameState.mistakes]);
 
   useEffect(() => {
     const q = query(
@@ -111,13 +146,13 @@ export default function App() {
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    if (!gameState.isPaused && !gameState.isGameOver) {
+    if (gameState.isStarted && !gameState.isPaused && !gameState.isGameOver) {
       interval = setInterval(() => {
         setGameState(prev => ({ ...prev, time: prev.time + 1 }));
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [gameState.isPaused, gameState.isGameOver]);
+  }, [gameState.isStarted, gameState.isPaused, gameState.isGameOver]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -164,16 +199,18 @@ export default function App() {
     const isWin = checkWin(newBoard);
     const isGameOver = newMistakes >= 3 || isWin;
 
-    if (isWin && username.trim()) {
-      try {
-        await addDoc(collection(db, 'rankings'), {
-          username: username.trim(),
-          time: gameState.time,
-          difficulty: gameState.difficulty,
-          createdAt: serverTimestamp()
-        });
-      } catch (e) {
-        console.error("Error adding ranking: ", e);
+    if (isWin) {
+      if (username.trim()) {
+        try {
+          await addDoc(collection(db, 'rankings'), {
+            username: username.trim(),
+            time: gameState.time,
+            difficulty: gameState.difficulty,
+            createdAt: serverTimestamp()
+          });
+        } catch (e) {
+          console.error("Error adding ranking: ", e);
+        }
       }
     }
 
@@ -357,7 +394,7 @@ export default function App() {
                       ${cell.initialValue !== null ? 'font-bold text-purple-900' : 'font-normal text-purple-800'}
                     `}
                   >
-                    {!gameState.isPaused && (
+                    {!gameState.isPaused && gameState.isStarted && (
                       <>
                         {cell.value !== null ? (
                           <motion.span
@@ -392,6 +429,67 @@ export default function App() {
               })
             )}
           </div>
+
+          {/* Start Screen Overlay */}
+          <AnimatePresence>
+            {!gameState.isStarted && (
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 bg-purple-900/80 backdrop-blur-md flex items-center justify-center z-50 p-8 text-center"
+              >
+                <div className="max-w-sm w-full space-y-8 bg-white p-8 rounded-3xl shadow-2xl">
+                  <div className="space-y-2">
+                    <div className="w-16 h-16 bg-purple-100 text-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                      <Gamepad2 size={32} />
+                    </div>
+                    <h2 className="text-2xl font-bold text-purple-900">게임을 시작할까요?</h2>
+                    <p className="text-purple-500 text-sm">이름을 입력하고 퍼즐에 도전하세요!</p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+                        <User size={18} className="text-purple-400" />
+                      </div>
+                      <input 
+                        type="text" 
+                        placeholder="당신의 이름"
+                        value={username}
+                        onChange={handleUsernameChange}
+                        className="w-full pl-12 pr-4 py-4 bg-purple-50 border-2 border-purple-100 rounded-2xl focus:border-purple-500 focus:ring-4 focus:ring-purple-500/10 outline-none transition-all font-medium text-purple-900"
+                      />
+                    </div>
+
+                    <div className="flex gap-2">
+                      {DIFFICULTIES.map(diff => (
+                        <button
+                          key={diff}
+                          onClick={() => setGameState(prev => ({ ...prev, difficulty: diff }))}
+                          className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${
+                            gameState.difficulty === diff 
+                              ? 'bg-purple-600 text-white shadow-lg' 
+                              : 'bg-purple-50 text-purple-400 hover:bg-purple-100'
+                          }`}
+                        >
+                          {diff}
+                        </button>
+                      ))}
+                    </div>
+
+                    <button 
+                      onClick={handleStartGame}
+                      className="w-full py-4 bg-purple-600 text-white rounded-2xl font-bold hover:bg-purple-700 transition-all shadow-lg shadow-purple-200 flex items-center justify-center gap-2 group"
+                    >
+                      <span>시작하기</span>
+                      <ChevronRight size={20} className="group-hover:translate-x-1 transition-transform" />
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Ranking Board Overlay */}
           <AnimatePresence>
@@ -473,30 +571,39 @@ export default function App() {
                 className="absolute inset-0 bg-purple-900/95 flex items-center justify-center z-30 p-8 text-center"
               >
                 <div className="space-y-6 text-white">
-                  <div className="flex justify-center">
+                  <div className="flex justify-center relative">
                     {gameState.mistakes < 3 ? (
-                      <div className="w-24 h-24 bg-emerald-500 rounded-full flex items-center justify-center shadow-lg shadow-emerald-500/20">
-                        <Trophy size={48} />
-                      </div>
+                      <>
+                        <motion.div 
+                          animate={{ rotate: 360 }}
+                          transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
+                          className="absolute inset-0 flex items-center justify-center"
+                        >
+                          <Sparkles size={120} className="text-yellow-400/30" />
+                        </motion.div>
+                        <div className="w-24 h-24 bg-emerald-500 rounded-full flex items-center justify-center shadow-lg shadow-emerald-500/20 relative z-10">
+                          <Trophy size={48} />
+                        </div>
+                      </>
                     ) : (
                       <div className="w-24 h-24 bg-red-500 rounded-full flex items-center justify-center shadow-lg shadow-red-500/20">
                         <AlertCircle size={48} />
                       </div>
                     )}
                   </div>
-                  <div>
-                    <h2 className="text-4xl font-bold">
-                      {gameState.mistakes < 3 ? '승리!' : '게임 종료'}
+                  <div className="relative z-10">
+                    <h2 className="text-5xl font-black italic tracking-tighter">
+                      {gameState.mistakes < 3 ? 'VICTORY!' : 'GAME OVER'}
                     </h2>
-                    <p className="text-purple-200 mt-2">
+                    <p className="text-purple-200 mt-2 font-medium">
                       {gameState.mistakes < 3 
-                        ? `${gameState.difficulty} 난이도를 ${formatTime(gameState.time)}만에 완료했습니다!`
+                        ? `${gameState.difficulty} 난이도를 ${formatTime(gameState.time)}만에 정복했습니다!`
                         : '실수 한도를 초과했습니다. 다시 도전해보세요.'}
                     </p>
                   </div>
                   <button 
                     onClick={() => startNewGame()}
-                    className="w-full py-4 bg-white text-purple-900 rounded-2xl font-bold hover:bg-purple-50 transition-colors"
+                    className="w-full py-4 bg-white text-purple-900 rounded-2xl font-bold hover:bg-purple-50 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-xl"
                   >
                     다시 하기
                   </button>
