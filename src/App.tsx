@@ -122,6 +122,46 @@ const playSuccessSound = () => {
   }
 };
 
+const playLineCompleteSound = () => {
+  try {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    
+    if (!audioCtx) {
+      audioCtx = new AudioContextClass();
+    }
+    
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+    
+    const playNote = (freq: number, startTime: number, duration: number) => {
+      if (!audioCtx) return;
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(freq, startTime);
+      
+      gainNode.gain.setValueAtTime(0.1, startTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      
+      oscillator.start(startTime);
+      oscillator.stop(startTime + duration);
+    };
+
+    const now = audioCtx.currentTime;
+    // Quick pleasant chime: G5, C6
+    playNote(783.99, now, 0.1);
+    playNote(1046.50, now + 0.05, 0.2);
+  } catch (e) {
+    console.error("Audio error:", e);
+  }
+};
+
 export default function App() {
   const [gameState, setGameState] = useState<GameState>({
     board: [],
@@ -143,6 +183,20 @@ export default function App() {
   const [rankings, setRankings] = useState<RankingEntry[]>([]);
   const [showRankings, setShowRankings] = useState(false);
   const [rankingDifficulty, setRankingDifficulty] = useState<Difficulty>('초급');
+  const [completedFeedback, setCompletedFeedback] = useState<{
+    type: 'row' | 'col' | 'block' | 'number';
+    index: number;
+    timestamp: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (completedFeedback) {
+      const timer = setTimeout(() => {
+        setCompletedFeedback(null);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [completedFeedback]);
 
   const { numberStats, remainingCellsCount } = useMemo(() => {
     const counts = new Array(10).fill(0);
@@ -292,6 +346,51 @@ export default function App() {
     const newMistakes = isCorrect ? gameState.mistakes : gameState.mistakes + 1;
     const isWin = checkWin(newBoard);
     const isGameOver = (gameState.isHardcore && newMistakes > 0) || newMistakes >= 3 || isWin;
+
+    if (isCorrect && !isWin) {
+      // Check for row completion
+      const isRowComplete = newBoard[row].every(c => c.value !== null && c.isCorrect);
+      // Check for col completion
+      const isColComplete = newBoard.every(r => r[col].value !== null && r[col].isCorrect);
+      // Check for block completion
+      const blockRow = Math.floor(row / 3) * 3;
+      const blockCol = Math.floor(col / 3) * 3;
+      let isBlockComplete = true;
+      for (let r = blockRow; r < blockRow + 3; r++) {
+        for (let c = blockCol; c < blockCol + 3; c++) {
+          if (newBoard[r][c].value === null || !newBoard[r][c].isCorrect) {
+            isBlockComplete = false;
+            break;
+          }
+        }
+      }
+      // Check for number completion (all 9 instances of 'num')
+      let numCount = 0;
+      for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+          if (newBoard[r][c].value === num && newBoard[r][c].isCorrect) {
+            numCount++;
+          }
+        }
+      }
+      const isNumComplete = numCount === 9;
+
+      if (isRowComplete || isColComplete || isBlockComplete || isNumComplete) {
+        playLineCompleteSound();
+        if (isRowComplete) setCompletedFeedback({ type: 'row', index: row, timestamp: Date.now() });
+        else if (isColComplete) setCompletedFeedback({ type: 'col', index: col, timestamp: Date.now() });
+        else if (isBlockComplete) setCompletedFeedback({ type: 'block', index: Math.floor(row / 3) * 3 + Math.floor(col / 3), timestamp: Date.now() });
+        else if (isNumComplete) setCompletedFeedback({ type: 'number', index: num, timestamp: Date.now() });
+
+        // Small confetti burst for line completion
+        confetti({
+          particleCount: 100,
+          spread: 70,
+          origin: { y: 0.6 },
+          colors: ['#9333ea', '#a855f7', '#c084fc']
+        });
+      }
+    }
 
     if (isWin) {
       if (username.trim()) {
@@ -505,6 +604,19 @@ export default function App() {
                 const isSameRowOrCol = gameState.selectedCell?.[0] === rIdx || gameState.selectedCell?.[1] === cIdx;
                 const isSameValue = selectedValue !== null && cell.value === selectedValue;
                 
+                // Completion feedback logic
+                let isCompletedHighlight = false;
+                if (completedFeedback) {
+                  if (completedFeedback.type === 'row' && completedFeedback.index === rIdx) isCompletedHighlight = true;
+                  else if (completedFeedback.type === 'col' && completedFeedback.index === cIdx) isCompletedHighlight = true;
+                  else if (completedFeedback.type === 'block') {
+                    const bRow = Math.floor(completedFeedback.index / 3);
+                    const bCol = completedFeedback.index % 3;
+                    if (Math.floor(rIdx / 3) === bRow && Math.floor(cIdx / 3) === bCol) isCompletedHighlight = true;
+                  }
+                  else if (completedFeedback.type === 'number' && cell.value === completedFeedback.index && cell.isCorrect) isCompletedHighlight = true;
+                }
+
                 const borderRight = (cIdx + 1) % 3 === 0 && cIdx !== 8 ? 'border-r-2 border-purple-300' : (cIdx !== 8 ? 'border-r border-purple-300' : '');
                 const borderBottom = (rIdx + 1) % 3 === 0 && rIdx !== 8 ? 'border-b-2 border-purple-300' : (rIdx !== 8 ? 'border-b border-purple-300' : '');
 
@@ -519,7 +631,8 @@ export default function App() {
                     className={`
                       relative flex items-center justify-center font-medium transition-all
                       ${borderRight} ${borderBottom}
-                      ${isSelected ? 'bg-purple-700 text-white z-20 scale-105 shadow-xl ring-4 ring-purple-300' : 
+                      ${isCompletedHighlight ? 'bg-green-400 text-white z-30 scale-105 shadow-2xl ring-4 ring-green-200' :
+                        isSelected ? 'bg-purple-700 text-white z-20 scale-105 shadow-xl ring-4 ring-purple-300' : 
                         isSameValue ? 'bg-purple-500 text-white scale-110 z-10 shadow-lg ring-2 ring-purple-400' :
                         isSameRowOrCol ? 'bg-purple-200/60 text-purple-900' : 
                         isBlockChecker ? 'bg-white' : 'bg-purple-50'}
