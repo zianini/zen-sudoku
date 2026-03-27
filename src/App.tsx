@@ -315,7 +315,7 @@ export default function App() {
     const [row, col] = gameState.selectedCell;
     const cell = gameState.board[row][col];
 
-    if (cell.initialValue !== null) return;
+    if (cell.initialValue !== null || (cell.value !== null && cell.isCorrect)) return;
 
     if (isNotesMode) {
       const newBoard = [...gameState.board];
@@ -419,7 +419,7 @@ export default function App() {
     if (!gameState.selectedCell || gameState.isPaused || gameState.isGameOver || gameState.isAutoFilling) return;
     const [row, col] = gameState.selectedCell;
     const cell = gameState.board[row][col];
-    if (cell.initialValue !== null) return;
+    if (cell.initialValue !== null || (cell.value !== null && cell.isCorrect)) return;
 
     const newBoard = [...gameState.board];
     newBoard[row][col] = { ...cell, value: null, isNotes: [], isCorrect: true };
