@@ -38,6 +38,90 @@ interface RankingEntry {
   createdAt: Timestamp;
 }
 
+let audioCtx: AudioContext | null = null;
+
+const playMistakeSound = () => {
+  try {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    
+    if (!audioCtx) {
+      audioCtx = new AudioContextClass();
+    }
+    
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+    
+    const playNote = (freq: number, startTime: number, duration: number) => {
+      if (!audioCtx) return;
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      
+      oscillator.type = 'triangle';
+      oscillator.frequency.setValueAtTime(freq, startTime);
+      
+      gainNode.gain.setValueAtTime(0.15, startTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      
+      oscillator.start(startTime);
+      oscillator.stop(startTime + duration);
+    };
+
+    const now = audioCtx.currentTime;
+    playNote(220, now, 0.1);
+    playNote(165, now + 0.08, 0.1);
+    playNote(110, now + 0.16, 0.2);
+  } catch (e) {
+    console.error("Audio error:", e);
+  }
+};
+
+const playSuccessSound = () => {
+  try {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    
+    if (!audioCtx) {
+      audioCtx = new AudioContextClass();
+    }
+    
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+    
+    const playNote = (freq: number, startTime: number, duration: number) => {
+      if (!audioCtx) return;
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(freq, startTime);
+      
+      gainNode.gain.setValueAtTime(0.15, startTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      
+      oscillator.start(startTime);
+      oscillator.stop(startTime + duration);
+    };
+
+    const now = audioCtx.currentTime;
+    // Rising major chord: C5, E5, G5, C6
+    playNote(523.25, now, 0.15);
+    playNote(659.25, now + 0.1, 0.15);
+    playNote(783.99, now + 0.2, 0.15);
+    playNote(1046.50, now + 0.3, 0.4);
+  } catch (e) {
+    console.error("Audio error:", e);
+  }
+};
+
 export default function App() {
   const [gameState, setGameState] = useState<GameState>({
     board: [],
@@ -51,6 +135,7 @@ export default function App() {
     noHints: false,
     isAutoFilling: false,
     selectedCell: null,
+    fontSize: 24,
   });
   const [solution, setSolution] = useState<number[][]>([]);
   const [isNotesMode, setIsNotesMode] = useState(false);
@@ -112,6 +197,7 @@ export default function App() {
 
   useEffect(() => {
     if (gameState.isGameOver && gameState.mistakes < 3) {
+      playSuccessSound();
       const duration = 3 * 1000;
       const animationEnd = Date.now() + duration;
       const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
@@ -192,6 +278,9 @@ export default function App() {
     }
 
     const isCorrect = solution[row][col] === num;
+    if (!isCorrect) {
+      playMistakeSound();
+    }
     const newBoard = [...gameState.board];
     newBoard[row][col] = {
       ...cell,
@@ -318,6 +407,35 @@ export default function App() {
     }));
   };
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!gameState.isStarted || gameState.isPaused || gameState.isGameOver || gameState.isAutoFilling) return;
+
+      // Number input
+      if (e.key >= '1' && e.key <= '9') {
+        handleNumberInput(parseInt(e.key));
+      } else if (e.key === 'Backspace' || e.key === 'Delete') {
+        handleErase();
+      } else if (e.key === 'n' || e.key === 'N') {
+        setIsNotesMode(prev => !prev);
+      } else if (e.key === 'h' || e.key === 'H') {
+        handleHint();
+      }
+      
+      // Navigation
+      if (gameState.selectedCell) {
+        const [r, c] = gameState.selectedCell;
+        if (e.key === 'ArrowUp') setGameState(prev => ({ ...prev, selectedCell: [Math.max(0, r - 1), c] }));
+        if (e.key === 'ArrowDown') setGameState(prev => ({ ...prev, selectedCell: [Math.min(8, r + 1), c] }));
+        if (e.key === 'ArrowLeft') setGameState(prev => ({ ...prev, selectedCell: [r, Math.max(0, c - 1)] }));
+        if (e.key === 'ArrowRight') setGameState(prev => ({ ...prev, selectedCell: [r, Math.min(8, c + 1)] }));
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [gameState.isStarted, gameState.isPaused, gameState.isGameOver, gameState.selectedCell, gameState.isAutoFilling, isNotesMode]);
+
   const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setUsername(val);
@@ -397,8 +515,9 @@ export default function App() {
                   <button
                     key={`${rIdx}-${cIdx}`}
                     onClick={() => handleCellClick(rIdx, cIdx)}
+                    style={{ fontSize: `${gameState.fontSize}px` }}
                     className={`
-                      relative flex items-center justify-center text-2xl font-medium transition-all
+                      relative flex items-center justify-center font-medium transition-all
                       ${borderRight} ${borderBottom}
                       ${isSelected ? 'bg-purple-700 text-white z-20 scale-105 shadow-xl ring-4 ring-purple-300' : 
                         isSameValue ? 'bg-purple-500 text-white scale-110 z-10 shadow-lg ring-2 ring-purple-400' :
@@ -678,37 +797,55 @@ export default function App() {
         </div>
 
         {/* Controls Bar */}
-        <div className="flex items-center justify-between bg-white p-2 rounded-2xl shadow-sm border border-purple-200">
-          <div className="flex gap-1">
-            {DIFFICULTIES.map(diff => (
-              <button
-                key={diff}
-                onClick={() => startNewGame(diff)}
-                className={`px-4 py-1.5 rounded-xl text-sm font-semibold transition-all ${
-                  gameState.difficulty === diff 
-                    ? 'bg-purple-600 text-white shadow-md shadow-purple-200' 
-                    : 'text-purple-500 hover:bg-purple-50'
-                }`}
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between bg-white p-2 rounded-2xl shadow-sm border border-purple-200">
+            <div className="flex gap-1">
+              {DIFFICULTIES.map(diff => (
+                <button
+                  key={diff}
+                  onClick={() => startNewGame(diff)}
+                  className={`px-4 py-1.5 rounded-xl text-sm font-semibold transition-all ${
+                    gameState.difficulty === diff 
+                      ? 'bg-purple-600 text-white shadow-md shadow-purple-200' 
+                      : 'text-purple-500 hover:bg-purple-50'
+                  }`}
+                >
+                  {diff}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setGameState(prev => ({ ...prev, isPaused: !prev.isPaused }))}
+                className="p-2 hover:bg-purple-50 rounded-xl transition-colors text-purple-600"
+                title={gameState.isPaused ? "재개" : "일시정지"}
               >
-                {diff}
+                {gameState.isPaused ? <Play size={20} /> : <Pause size={20} />}
               </button>
-            ))}
+              <button 
+                onClick={() => startNewGame()}
+                className="p-2 hover:bg-purple-50 rounded-xl transition-colors text-purple-600"
+                title="새 게임"
+              >
+                <RotateCcw size={20} />
+              </button>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <button 
-              onClick={() => setGameState(prev => ({ ...prev, isPaused: !prev.isPaused }))}
-              className="p-2 hover:bg-purple-50 rounded-xl transition-colors text-purple-600"
-              title={gameState.isPaused ? "재개" : "일시정지"}
-            >
-              {gameState.isPaused ? <Play size={20} /> : <Pause size={20} />}
-            </button>
-            <button 
-              onClick={() => startNewGame()}
-              className="p-2 hover:bg-purple-50 rounded-xl transition-colors text-purple-600"
-              title="새 게임"
-            >
-              <RotateCcw size={20} />
-            </button>
+
+          {/* Font Size Control */}
+          <div className="flex items-center gap-4 bg-white p-3 rounded-2xl shadow-sm border border-purple-200">
+            <div className="flex items-center gap-2 text-purple-600">
+              <span className="text-xs font-bold uppercase tracking-wider">Font Size</span>
+              <span className="text-sm font-mono bg-purple-50 px-2 py-0.5 rounded-lg border border-purple-100">{gameState.fontSize}px</span>
+            </div>
+            <input 
+              type="range" 
+              min="16" 
+              max="40" 
+              value={gameState.fontSize}
+              onChange={(e) => setGameState(prev => ({ ...prev, fontSize: parseInt(e.target.value) }))}
+              className="flex-1 h-2 bg-purple-100 rounded-lg appearance-none cursor-pointer accent-purple-600"
+            />
           </div>
         </div>
 

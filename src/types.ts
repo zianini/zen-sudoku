@@ -21,4 +21,5 @@ export interface GameState {
   noHints: boolean;
   isAutoFilling: boolean;
   selectedCell: [number, number] | null;
+  fontSize: number;
 }
