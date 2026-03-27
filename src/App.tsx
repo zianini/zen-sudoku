@@ -26,7 +26,7 @@ import {
 import { Difficulty, SudokuBoard, GameState } from './types';
 import { generateFullBoard, createPuzzle, checkWin } from './utils/sudoku';
 import { db } from './firebase';
-import { collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp, Timestamp, where } from 'firebase/firestore';
 
 const DIFFICULTIES: Difficulty[] = ['초급', '중급', '고급'];
 
@@ -47,6 +47,8 @@ export default function App() {
     isPaused: false,
     isGameOver: false,
     isStarted: false,
+    isHardcore: false,
+    noHints: false,
     isAutoFilling: false,
     selectedCell: null,
   });
@@ -55,6 +57,7 @@ export default function App() {
   const [username, setUsername] = useState(localStorage.getItem('sudoku_username') || '');
   const [rankings, setRankings] = useState<RankingEntry[]>([]);
   const [showRankings, setShowRankings] = useState(false);
+  const [rankingDifficulty, setRankingDifficulty] = useState<Difficulty>('초급');
 
   const { numberStats, remainingCellsCount } = useMemo(() => {
     const counts = new Array(10).fill(0);
@@ -81,7 +84,8 @@ export default function App() {
     const fullBoard = generateFullBoard();
     const puzzle = createPuzzle(fullBoard, diff);
     setSolution(fullBoard);
-    setGameState({
+    setGameState(prev => ({
+      ...prev,
       board: puzzle,
       difficulty: diff,
       mistakes: 0,
@@ -91,7 +95,7 @@ export default function App() {
       isStarted: false,
       isAutoFilling: false,
       selectedCell: null,
-    });
+    }));
   }, [gameState.difficulty]);
 
   const handleStartGame = () => {
@@ -131,6 +135,7 @@ export default function App() {
   useEffect(() => {
     const q = query(
       collection(db, 'rankings'),
+      where('difficulty', '==', rankingDifficulty),
       orderBy('time', 'asc'),
       limit(10)
     );
@@ -142,7 +147,7 @@ export default function App() {
       setRankings(entries);
     });
     return () => unsubscribe();
-  }, []);
+  }, [rankingDifficulty]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -197,7 +202,7 @@ export default function App() {
 
     const newMistakes = isCorrect ? gameState.mistakes : gameState.mistakes + 1;
     const isWin = checkWin(newBoard);
-    const isGameOver = newMistakes >= 3 || isWin;
+    const isGameOver = (gameState.isHardcore && newMistakes > 0) || newMistakes >= 3 || isWin;
 
     if (isWin) {
       if (username.trim()) {
@@ -234,7 +239,7 @@ export default function App() {
   };
 
   const handleHint = () => {
-    if (!gameState.selectedCell || gameState.isPaused || gameState.isGameOver || gameState.isAutoFilling) return;
+    if (gameState.noHints || !gameState.selectedCell || gameState.isPaused || gameState.isGameOver || gameState.isAutoFilling) return;
     const [row, col] = gameState.selectedCell;
     const cell = gameState.board[row][col];
     if (cell.value !== null) return;
@@ -252,6 +257,7 @@ export default function App() {
     setGameState(prev => ({
       ...prev,
       board: newBoard,
+      time: prev.time + 30,
       isGameOver: checkWin(newBoard)
     }));
   };
@@ -339,9 +345,17 @@ export default function App() {
             </button>
           </div>
           <div className="flex items-center gap-6 text-sm font-mono text-purple-700 bg-white px-4 py-2 rounded-xl shadow-sm border border-purple-200">
-            <div className="flex items-center gap-2">
-              <AlertCircle size={16} className="text-purple-400" />
-              <span>실수: {gameState.mistakes}/3</span>
+            <div className="flex flex-wrap gap-2 items-center">
+              <div className="flex items-center gap-2">
+                <AlertCircle size={16} className={gameState.isHardcore ? "text-red-500" : "text-purple-400"} />
+                <span>실수: {gameState.mistakes}/{gameState.isHardcore ? '1' : '3'}</span>
+              </div>
+              {gameState.isHardcore && (
+                <span className="px-2 py-0.5 bg-red-100 text-red-600 text-[10px] font-bold rounded-full uppercase tracking-tighter">Hardcore</span>
+              )}
+              {gameState.noHints && (
+                <span className="px-2 py-0.5 bg-purple-100 text-purple-600 text-[10px] font-bold rounded-full uppercase tracking-tighter">No Hints</span>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <Timer size={16} className="text-purple-400" />
@@ -478,12 +492,45 @@ export default function App() {
                       ))}
                     </div>
 
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => setGameState(prev => ({ ...prev, noHints: !prev.noHints }))}
+                        className={`py-3 rounded-2xl text-xs font-bold transition-all flex items-center justify-center gap-2 border-2 ${
+                          gameState.noHints 
+                            ? 'bg-red-50 border-red-200 text-red-600' 
+                            : 'bg-purple-50 border-purple-100 text-purple-400'
+                        }`}
+                      >
+                        <Lightbulb size={16} />
+                        <span>힌트 없음</span>
+                      </button>
+                      <button
+                        onClick={() => setGameState(prev => ({ ...prev, isHardcore: !prev.isHardcore }))}
+                        className={`py-3 rounded-2xl text-xs font-bold transition-all flex items-center justify-center gap-2 border-2 ${
+                          gameState.isHardcore 
+                            ? 'bg-red-600 border-red-600 text-white shadow-lg' 
+                            : 'bg-purple-50 border-purple-100 text-purple-400'
+                        }`}
+                      >
+                        <AlertCircle size={16} />
+                        <span>원라이프</span>
+                      </button>
+                    </div>
+
                     <button 
                       onClick={handleStartGame}
                       className="w-full py-4 bg-purple-600 text-white rounded-2xl font-bold hover:bg-purple-700 transition-all shadow-lg shadow-purple-200 flex items-center justify-center gap-2 group"
                     >
                       <span>시작하기</span>
                       <ChevronRight size={20} className="group-hover:translate-x-1 transition-transform" />
+                    </button>
+
+                    <button 
+                      onClick={() => setShowRankings(true)}
+                      className="w-full py-3 bg-white text-purple-600 border-2 border-purple-100 rounded-2xl font-bold hover:bg-purple-50 transition-all flex items-center justify-center gap-2"
+                    >
+                      <Medal size={20} />
+                      <span>명예의 전당 보기</span>
                     </button>
                   </div>
                 </div>
@@ -498,7 +545,7 @@ export default function App() {
                 initial={{ opacity: 0, x: 300 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 300 }}
-                className="absolute inset-0 bg-white z-40 p-6 overflow-y-auto"
+                className="absolute inset-0 bg-white z-[60] p-6 overflow-y-auto"
               >
                 <div className="flex items-center justify-between mb-6">
                   <h2 className="text-2xl font-bold text-purple-900 flex items-center gap-2">
@@ -508,6 +555,24 @@ export default function App() {
                     <ChevronRight size={24} className="text-purple-400" />
                   </button>
                 </div>
+
+                {/* Difficulty Tabs */}
+                <div className="flex gap-2 mb-6 bg-purple-50 p-1 rounded-2xl">
+                  {DIFFICULTIES.map(diff => (
+                    <button
+                      key={diff}
+                      onClick={() => setRankingDifficulty(diff)}
+                      className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all ${
+                        rankingDifficulty === diff 
+                          ? 'bg-white text-purple-600 shadow-sm' 
+                          : 'text-purple-400 hover:text-purple-500'
+                      }`}
+                    >
+                      {diff}
+                    </button>
+                  ))}
+                </div>
+
                 <div className="space-y-3">
                   {rankings.map((entry, idx) => (
                     <div key={entry.id} className="flex items-center justify-between p-4 bg-purple-50 rounded-2xl border border-purple-100">
@@ -521,19 +586,18 @@ export default function App() {
                         </span>
                         <div>
                           <p className="font-bold text-purple-900">{entry.username}</p>
-                          <p className="text-xs text-purple-500">{entry.difficulty}</p>
+                          <p className="text-[10px] text-purple-400">
+                            {entry.createdAt?.toDate().toLocaleDateString()}
+                          </p>
                         </div>
                       </div>
                       <div className="text-right">
                         <p className="font-mono font-bold text-purple-700">{formatTime(entry.time)}</p>
-                        <p className="text-[10px] text-purple-400">
-                          {entry.createdAt?.toDate().toLocaleDateString()}
-                        </p>
                       </div>
                     </div>
                   ))}
                   {rankings.length === 0 && (
-                    <p className="text-center text-purple-400 py-12">아직 기록이 없습니다. 첫 주인공이 되어보세요!</p>
+                    <p className="text-center text-purple-400 py-12">아직 {rankingDifficulty} 기록이 없습니다. 첫 주인공이 되어보세요!</p>
                   )}
                 </div>
               </motion.div>
@@ -716,10 +780,11 @@ export default function App() {
           </button>
           <button 
             onClick={handleHint}
-            className="flex flex-col items-center gap-2 p-4 bg-white rounded-2xl border border-purple-200 text-purple-600 hover:border-purple-400 transition-all shadow-sm"
+            disabled={gameState.noHints}
+            className={`flex flex-col items-center gap-2 p-4 bg-white rounded-2xl border border-purple-200 text-purple-600 hover:border-purple-400 transition-all shadow-sm ${gameState.noHints ? 'opacity-50 grayscale cursor-not-allowed' : ''}`}
           >
             <Lightbulb size={20} />
-            <span className="text-xs font-bold uppercase tracking-wider">힌트</span>
+            <span className="text-xs font-bold uppercase tracking-wider">{gameState.noHints ? '잠김' : '힌트'}</span>
           </button>
           <button 
             onClick={handleErase}

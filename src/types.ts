@@ -17,6 +17,8 @@ export interface GameState {
   isPaused: boolean;
   isGameOver: boolean;
   isStarted: boolean;
+  isHardcore: boolean;
+  noHints: boolean;
   isAutoFilling: boolean;
   selectedCell: [number, number] | null;
 }
