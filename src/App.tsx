@@ -28,7 +28,7 @@ import { generateFullBoard, createPuzzle, checkWin } from './utils/sudoku';
 import { db } from './firebase';
 import { collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp, Timestamp, where } from 'firebase/firestore';
 
-const DIFFICULTIES: Difficulty[] = ['초급', '중급', '고급'];
+const DIFFICULTIES: Difficulty[] = ['초급', '중급', '고급', '전문가'];
 
 interface RankingEntry {
   id: string;
@@ -581,20 +581,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Username Input */}
-        <div className="relative group">
-          <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-            <User size={18} className="text-purple-400" />
-          </div>
-          <input 
-            type="text" 
-            placeholder="사용자 이름을 입력하세요 (랭킹 등록용)"
-            value={username}
-            onChange={handleUsernameChange}
-            className="w-full pl-12 pr-4 py-3 bg-white border border-purple-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all shadow-sm text-purple-900 font-medium"
-          />
-        </div>
-
         {/* Main Game Area */}
         <div className="relative aspect-square w-full bg-white rounded-2xl shadow-2xl border-4 border-purple-900 overflow-hidden">
           <div className="absolute inset-0 grid grid-cols-9 grid-rows-9">
@@ -909,59 +895,6 @@ export default function App() {
           </AnimatePresence>
         </div>
 
-        {/* Controls Bar */}
-        <div className="flex flex-col gap-4">
-          <div className="flex items-center justify-between bg-white p-2 rounded-2xl shadow-sm border border-purple-200">
-            <div className="flex gap-1">
-              {DIFFICULTIES.map(diff => (
-                <button
-                  key={diff}
-                  onClick={() => startNewGame(diff)}
-                  className={`px-4 py-1.5 rounded-xl text-sm font-semibold transition-all ${
-                    gameState.difficulty === diff 
-                      ? 'bg-purple-600 text-white shadow-md shadow-purple-200' 
-                      : 'text-purple-500 hover:bg-purple-50'
-                  }`}
-                >
-                  {diff}
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <button 
-                onClick={() => setGameState(prev => ({ ...prev, isPaused: !prev.isPaused }))}
-                className="p-2 hover:bg-purple-50 rounded-xl transition-colors text-purple-600"
-                title={gameState.isPaused ? "재개" : "일시정지"}
-              >
-                {gameState.isPaused ? <Play size={20} /> : <Pause size={20} />}
-              </button>
-              <button 
-                onClick={() => startNewGame()}
-                className="p-2 hover:bg-purple-50 rounded-xl transition-colors text-purple-600"
-                title="새 게임"
-              >
-                <RotateCcw size={20} />
-              </button>
-            </div>
-          </div>
-
-          {/* Font Size Control */}
-          <div className="flex items-center gap-4 bg-white p-3 rounded-2xl shadow-sm border border-purple-200">
-            <div className="flex items-center gap-2 text-purple-600">
-              <span className="text-xs font-bold uppercase tracking-wider">Font Size</span>
-              <span className="text-sm font-mono bg-purple-50 px-2 py-0.5 rounded-lg border border-purple-100">{gameState.fontSize}px</span>
-            </div>
-            <input 
-              type="range" 
-              min="16" 
-              max="40" 
-              value={gameState.fontSize}
-              onChange={(e) => setGameState(prev => ({ ...prev, fontSize: parseInt(e.target.value) }))}
-              className="flex-1 h-2 bg-purple-100 rounded-lg appearance-none cursor-pointer accent-purple-600"
-            />
-          </div>
-        </div>
-
         {/* Number Pad */}
         <div className="relative">
           <div className="grid grid-cols-9 gap-2">
@@ -1015,6 +948,73 @@ export default function App() {
               </motion.div>
             )}
           </AnimatePresence>
+        </div>
+
+        {/* Username Input */}
+        <div className="relative group">
+          <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+            <User size={18} className="text-purple-400" />
+          </div>
+          <input 
+            type="text" 
+            placeholder="사용자 이름을 입력하세요 (랭킹 등록용)"
+            value={username}
+            onChange={handleUsernameChange}
+            className="w-full pl-12 pr-4 py-3 bg-white border border-purple-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all shadow-sm text-purple-900 font-medium"
+          />
+        </div>
+
+        {/* Controls Bar */}
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between bg-white p-2 rounded-2xl shadow-sm border border-purple-200">
+            <div className="flex gap-1">
+              {DIFFICULTIES.map(diff => (
+                <button
+                  key={diff}
+                  onClick={() => startNewGame(diff)}
+                  className={`px-4 py-1.5 rounded-xl text-sm font-semibold transition-all ${
+                    gameState.difficulty === diff 
+                      ? 'bg-purple-600 text-white shadow-md shadow-purple-200' 
+                      : 'text-purple-500 hover:bg-purple-50'
+                  }`}
+                >
+                  {diff}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setGameState(prev => ({ ...prev, isPaused: !prev.isPaused }))}
+                className="p-2 hover:bg-purple-50 rounded-xl transition-colors text-purple-600"
+                title={gameState.isPaused ? "재개" : "일시정지"}
+              >
+                {gameState.isPaused ? <Play size={20} /> : <Pause size={20} />}
+              </button>
+              <button 
+                onClick={() => startNewGame()}
+                className="p-2 hover:bg-purple-50 rounded-xl transition-colors text-purple-600"
+                title="새 게임"
+              >
+                <RotateCcw size={20} />
+              </button>
+            </div>
+          </div>
+
+          {/* Font Size Control */}
+          <div className="flex items-center gap-4 bg-white p-3 rounded-2xl shadow-sm border border-purple-200">
+            <div className="flex items-center gap-2 text-purple-600">
+              <span className="text-xs font-bold uppercase tracking-wider">Font Size</span>
+              <span className="text-sm font-mono bg-purple-50 px-2 py-0.5 rounded-lg border border-purple-100">{gameState.fontSize}px</span>
+            </div>
+            <input 
+              type="range" 
+              min="16" 
+              max="40" 
+              value={gameState.fontSize}
+              onChange={(e) => setGameState(prev => ({ ...prev, fontSize: parseInt(e.target.value) }))}
+              className="flex-1 h-2 bg-purple-100 rounded-lg appearance-none cursor-pointer accent-purple-600"
+            />
+          </div>
         </div>
 
         {/* Action Buttons */}

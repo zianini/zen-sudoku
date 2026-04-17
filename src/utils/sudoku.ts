@@ -53,10 +53,11 @@ export const createPuzzle = (fullBoard: number[][], difficulty: string): SudokuB
   let attempts = 0;
   let cellsToRemove = 0;
   switch (difficulty) {
-    case '초급': cellsToRemove = 35; break;
-    case '중급': cellsToRemove = 45; break;
-    case '고급': cellsToRemove = 55; break;
-    default: cellsToRemove = 35;
+    case '초급': cellsToRemove = 30; break;
+    case '중급': cellsToRemove = 42; break;
+    case '고급': cellsToRemove = 54; break;
+    case '전문가': cellsToRemove = 64; break;
+    default: cellsToRemove = 40;
   }
 
   while (attempts < cellsToRemove) {

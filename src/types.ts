@@ -1,4 +1,4 @@
-export type Difficulty = '초급' | '중급' | '고급';
+export type Difficulty = '초급' | '중급' | '고급' | '전문가';
 
 export interface SudokuCell {
   value: number | null;
